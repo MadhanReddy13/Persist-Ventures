@@ -1,0 +1,51 @@
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.keys import Keys
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
+import requests
+import time
+
+linkedin_username = 'your_linkedin_username'
+linkedin_password = 'your_linkedin_password'
+google_sheets_credentials_file = 'path_to_credentials.json'
+spreadsheet_id = 'your_spreadsheet_id'
+sheet_name = 'Sheet1'
+giphy_api_key = 'your_giphy_api_key'
+search_term = 'funny'
+service = Service('path_to_chromedriver')
+driver = webdriver.Chrome(service=service)
+driver.get('https://www.linkedin.com/login')
+driver.find_element(By.ID, 'username').send_keys(linkedin_username)
+driver.find_element(By.ID, 'password').send_keys(linkedin_password)
+driver.find_element(By.ID, 'password').send_keys(Keys.RETURN)
+time.sleep(5)
+driver.get('https://www.linkedin.com/in/your-profile/')
+time.sleep(5)
+post_urls = []
+posts = driver.find_elements(By.CSS_SELECTOR, 'a[href*="/feed/update"]')
+for post in posts:
+    url = post.get_attribute('href')
+    post_urls.append(url)
+driver.quit()
+creds = service_account.Credentials.from_service_account_file(google_sheets_credentials_file)
+service = build('sheets', 'v4', credentials=creds)
+sheet = service.spreadsheets()
+values = [[url] for url in post_urls]
+body = {'values': values}
+result = sheet.values().update(spreadsheetId=spreadsheet_id, range=sheet_name, valueInputOption='RAW', body=body).execute()
+print(f"{result.get('updatedCells')} cells updated with LinkedIn post URLs.")
+giphy_url = f'https://api.giphy.com/v1/gifs/search?api_key={giphy_api_key}&q={search_term}&limit=10'
+response = requests.get(giphy_url)
+data = response.json()
+gifs = data['data']
+ranked_gifs = sorted(gifs, key=lambda x: x['analytics']['on_load']['total'], reverse=True)
+gif_urls = [gif['url'] for gif in ranked_gifs]
+print("Ranked GIF URLs:")
+for url in gif_urls:
+    print(url)
+gif_values = [[url] for url in gif_urls]
+gif_body = {'values': gif_values}
+gif_result = sheet.values().update(spreadsheetId=spreadsheet_id, range='GIFs', valueInputOption='RAW', body=gif_body).execute()
+print(f"{gif_result.get('updatedCells')} cells updated with GIF URLs.")
